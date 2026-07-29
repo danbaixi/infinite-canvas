@@ -1,6 +1,7 @@
 import axios, { type AxiosRequestConfig } from "axios";
 
 import { buildApiUrl, type AiConfig, type ModelCapability } from "@/stores/use-config-store";
+import { shouldProxy, proxyUrl } from "./cors-proxy";
 
 type RequestOptions = { signal?: AbortSignal };
 
@@ -37,8 +38,13 @@ function pluginHeaders(extra?: Record<string, string>, hasJsonBody = false): Rec
 }
 
 function pluginUrl(config: AiConfig, path: string) {
-    if (/^https?:/i.test(path)) return path;
-    return buildApiUrl(config.baseUrl, path.startsWith("/") ? path : `/${path}`);
+    let url: string;
+    if (/^https?:/i.test(path)) {
+        url = path;
+    } else {
+        url = buildApiUrl(config.baseUrl, path.startsWith("/") ? path : `/${path}`);
+    }
+    return shouldProxy(url) ? proxyUrl(url) : url;
 }
 
 function createPluginHttp(config: AiConfig, options?: RequestOptions): PluginHttp {

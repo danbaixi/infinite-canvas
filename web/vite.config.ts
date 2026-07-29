@@ -38,9 +38,97 @@ function localPluginsManifest(): Plugin {
     };
 }
 
+// 通用 CORS 代理中间件：解决第三方 API 跨域问题
+// 前端将请求发到 /api/cors-proxy?url=<encoded_url>，由开发服务器转发到目标地址
+function corsProxy(): Plugin {
+    return {
+        name: "cors-proxy",
+        configureServer(server) {
+            // OPTIONS 预检先处理，直接返回
+            server.middlewares.use("/api/cors-proxy", (req, res, next) => {
+                if (req.method === "OPTIONS") {
+                    res.setHeader("Access-Control-Allow-Origin", "*");
+                    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+                    res.setHeader("Access-Control-Allow-Headers", "*");
+                    res.statusCode = 204;
+                    res.end();
+                    return;
+                }
+                next();
+            });
+
+            server.middlewares.use("/api/cors-proxy", async (req, res) => {
+                const url = new URL(req.url!, `http://${req.headers.host}`);
+                const targetUrl = url.searchParams.get("url");
+                if (!targetUrl) {
+                    res.statusCode = 400;
+                    res.setHeader("Content-Type", "application/json");
+                    res.end(JSON.stringify({ error: "缺少 url 参数" }));
+                    return;
+                }
+
+                try {
+                    const headers: Record<string, string> = {};
+                    // 转发客户端传过来的关键请求头
+                    const forwardHeaders = ["authorization", "content-type", "x-api-key", "x-goog-api-key"];
+                    for (const key of forwardHeaders) {
+                        const value = req.headers[key];
+                        if (value) headers[key] = Array.isArray(value) ? value[0] : value;
+                    }
+
+                    const fetchOptions: RequestInit = {
+                        method: req.method || "GET",
+                        headers,
+                    };
+
+                    // 非 GET/HEAD 请求转发 body
+                    if (req.method !== "GET" && req.method !== "HEAD") {
+                        const body = await new Promise<Buffer>((resolve, reject) => {
+                            const chunks: Buffer[] = [];
+                            req.on("data", (chunk: Buffer) => chunks.push(chunk));
+                            req.on("end", () => resolve(Buffer.concat(chunks)));
+                            req.on("error", reject);
+                        });
+                        fetchOptions.body = body;
+                    }
+
+                    const upstream = await fetch(targetUrl, fetchOptions);
+
+                    // 转发响应
+                    res.statusCode = upstream.status;
+                    upstream.headers.forEach((value, key) => {
+                        if (!["content-encoding", "transfer-encoding"].includes(key.toLowerCase())) {
+                            res.setHeader(key, value);
+                        }
+                    });
+                    res.setHeader("Access-Control-Allow-Origin", "*");
+
+                    if (upstream.body) {
+                        const reader = upstream.body.getReader();
+                        const pump = async () => {
+                            while (true) {
+                                const { done, value } = await reader.read();
+                                if (done) { res.end(); break; }
+                                res.write(value);
+                            }
+                        };
+                        await pump();
+                    } else {
+                        res.end();
+                    }
+                } catch (err) {
+                    res.statusCode = 502;
+                    res.setHeader("Content-Type", "application/json");
+                    res.end(JSON.stringify({ error: "代理请求失败", detail: String(err) }));
+                }
+            });
+        },
+    };
+}
+
 export default defineConfig({
     base: process.env.VITE_BASE || "/",
-    plugins: [react(), localPluginsManifest()],
+    plugins: [react(), localPluginsManifest(), corsProxy()],
     resolve: {
         alias: {
             "@": resolve(webDir, "src"),

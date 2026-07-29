@@ -7,6 +7,7 @@ import { dataUrlToFile } from "@/lib/image-utils";
 import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
 import { imageToDataUrl } from "@/services/image-storage";
 import type { ReferenceImage } from "@/types/image";
+import { shouldProxy, proxyUrl } from "./cors-proxy";
 
 export type AiTextMessage = {
     role: "system" | "user" | "assistant";
@@ -330,7 +331,8 @@ function withSystemPrompt(config: AiConfig, prompt: string) {
 }
 
 function aiApiUrl(config: AiConfig, path: string) {
-    return buildApiUrl(config.baseUrl, path);
+    const url = buildApiUrl(config.baseUrl, path);
+    return shouldProxy(url) ? proxyUrl(url) : url;
 }
 
 function aiHeaders(config: AiConfig, contentType?: string) {

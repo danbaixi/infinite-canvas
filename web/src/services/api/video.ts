@@ -9,6 +9,7 @@ import { buildApiUrl, modelOptionName, resolveModelRequestConfig, resolveModelSc
 import { runModelPlugin } from "./model-plugin";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
+import { shouldProxy, proxyUrl } from "./cors-proxy";
 
 type VideoResponse = { id: string; status?: string; error?: { message?: string }; url?: string; result_url?: string; video_url?: string; content?: { video_url?: string; url?: string } | null };
 type ApiVideoResponse = VideoResponse | { code?: number | string; data?: VideoResponse | null; msg?: string; message?: string; error?: { message?: string } };
@@ -32,7 +33,8 @@ export type VideoGenerationTaskState = { status: "pending" } | { status: "comple
 const pluginVideoResults = new Map<string, VideoGenerationResult>();
 
 function aiApiUrl(config: AiConfig, path: string) {
-    return buildApiUrl(config.baseUrl, path);
+    const url = buildApiUrl(config.baseUrl, path);
+    return shouldProxy(url) ? proxyUrl(url) : url;
 }
 
 function aiHeaders(config: AiConfig, contentType?: string) {

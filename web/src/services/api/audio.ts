@@ -4,11 +4,14 @@ import { audioMimeType, normalizeAudioFormatValue, normalizeAudioSpeedValue, nor
 import { uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { buildApiUrl, resolveModelRequestConfig, resolveModelScript, type AiConfig } from "@/stores/use-config-store";
 import { runModelPlugin } from "./model-plugin";
+import { shouldProxy, proxyUrl } from "./cors-proxy";
+import { shouldProxy, proxyUrl } from "./cors-proxy";
 
 type RequestOptions = { signal?: AbortSignal };
 
 function aiApiUrl(config: AiConfig, path: string) {
-    return buildApiUrl(config.baseUrl, path);
+    const url = buildApiUrl(config.baseUrl, path);
+    return shouldProxy(url) ? proxyUrl(url) : url;
 }
 
 function aiHeaders(config: AiConfig) {
