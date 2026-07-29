@@ -38,13 +38,11 @@ function localPluginsManifest(): Plugin {
     };
 }
 
-// 通用 CORS 代理中间件：解决第三方 API 跨域问题
-// 前端将请求发到 /api/cors-proxy?url=<encoded_url>，由开发服务器转发到目标地址
+// CORS 代理：前端将请求发到 /api/cors-proxy?url=<encoded_url>，由开发服务器转发到目标地址
 function corsProxy(): Plugin {
     return {
         name: "cors-proxy",
         configureServer(server) {
-            // OPTIONS 预检先处理，直接返回
             server.middlewares.use("/api/cors-proxy", (req, res, next) => {
                 if (req.method === "OPTIONS") {
                     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -69,7 +67,6 @@ function corsProxy(): Plugin {
 
                 try {
                     const headers: Record<string, string> = {};
-                    // 转发客户端传过来的关键请求头
                     const forwardHeaders = ["authorization", "content-type", "x-api-key", "x-goog-api-key"];
                     for (const key of forwardHeaders) {
                         const value = req.headers[key];
@@ -81,7 +78,6 @@ function corsProxy(): Plugin {
                         headers,
                     };
 
-                    // 非 GET/HEAD 请求转发 body
                     if (req.method !== "GET" && req.method !== "HEAD") {
                         const body = await new Promise<Buffer>((resolve, reject) => {
                             const chunks: Buffer[] = [];
@@ -94,7 +90,6 @@ function corsProxy(): Plugin {
 
                     const upstream = await fetch(targetUrl, fetchOptions);
 
-                    // 转发响应
                     res.statusCode = upstream.status;
                     upstream.headers.forEach((value, key) => {
                         if (!["content-encoding", "transfer-encoding"].includes(key.toLowerCase())) {

@@ -1,7 +1,6 @@
 import axios, { type AxiosRequestConfig } from "axios";
 
 import { buildApiUrl, type AiConfig, type ModelCapability } from "@/stores/use-config-store";
-import { shouldProxy, proxyUrl } from "./cors-proxy";
 
 type RequestOptions = { signal?: AbortSignal };
 
@@ -37,14 +36,12 @@ function pluginHeaders(extra?: Record<string, string>, hasJsonBody = false): Rec
     return { ...headers, ...extra };
 }
 
-function pluginUrl(config: AiConfig, path: string) {
-    let url: string;
+function pluginUrl(config: AiConfig & { useProxy?: boolean }, path: string) {
     if (/^https?:/i.test(path)) {
-        url = path;
-    } else {
-        url = buildApiUrl(config.baseUrl, path.startsWith("/") ? path : `/${path}`);
+        if (config.useProxy) return `/api/cors-proxy?url=${encodeURIComponent(path)}`;
+        return path;
     }
-    return shouldProxy(url) ? proxyUrl(url) : url;
+    return buildApiUrl(config.baseUrl, path.startsWith("/") ? path : `/${path}`, config.useProxy);
 }
 
 function createPluginHttp(config: AiConfig, options?: RequestOptions): PluginHttp {

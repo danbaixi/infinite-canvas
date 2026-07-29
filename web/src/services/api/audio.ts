@@ -5,13 +5,11 @@ import { uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { buildApiUrl, resolveModelRequestConfig, resolveModelScript, type AiConfig } from "@/stores/use-config-store";
 import { runModelPlugin } from "./model-plugin";
 import { shouldProxy, proxyUrl } from "./cors-proxy";
-import { shouldProxy, proxyUrl } from "./cors-proxy";
 
 type RequestOptions = { signal?: AbortSignal };
 
-function aiApiUrl(config: AiConfig, path: string) {
-    const url = buildApiUrl(config.baseUrl, path);
-    return shouldProxy(url) ? proxyUrl(url) : url;
+function aiApiUrl(config: AiConfig & { useProxy?: boolean }, path: string) {
+    return buildApiUrl(config.baseUrl, path, config.useProxy);
 }
 
 function aiHeaders(config: AiConfig) {

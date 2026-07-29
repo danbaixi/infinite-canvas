@@ -1,4 +1,4 @@
-import { Button, Drawer, Input, Segmented, Select, Space } from "antd";
+import { Button, Drawer, Input, Segmented, Select, Space, Switch } from "antd";
 import { ListPlus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -86,6 +86,13 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
                 <label className="block md:col-span-2">
                     <span className="mb-1 block text-sm font-medium">API Key</span>
                     <Input.Password value={draft.apiKey} onChange={(event) => patch({ apiKey: event.target.value })} placeholder="sk-..." />
+                </label>
+                <label className="block md:col-span-2">
+                    <span className="mb-1 flex items-center gap-2 text-sm font-medium">
+                        通过代理请求
+                        <Switch size="small" checked={draft.useProxy || false} onChange={(checked) => patch({ useProxy: checked })} />
+                    </span>
+                    <div className="text-xs text-stone-500">如果该渠道存在跨域问题，开启后将通过本地代理转发请求。</div>
                 </label>
             </div>
 

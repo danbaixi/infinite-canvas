@@ -9,8 +9,6 @@ import { buildApiUrl, modelOptionName, resolveModelRequestConfig, resolveModelSc
 import { runModelPlugin } from "./model-plugin";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
-import { shouldProxy, proxyUrl } from "./cors-proxy";
-
 type VideoResponse = { id: string; status?: string; error?: { message?: string }; url?: string; result_url?: string; video_url?: string; content?: { video_url?: string; url?: string } | null };
 type ApiVideoResponse = VideoResponse | { code?: number | string; data?: VideoResponse | null; msg?: string; message?: string; error?: { message?: string } };
 type SeedanceTask = {
@@ -32,9 +30,8 @@ export type VideoGenerationTaskState = { status: "pending" } | { status: "comple
 /** Results for scripted (plugin) video models, which run their own create+poll in one shot at task creation. */
 const pluginVideoResults = new Map<string, VideoGenerationResult>();
 
-function aiApiUrl(config: AiConfig, path: string) {
-    const url = buildApiUrl(config.baseUrl, path);
-    return shouldProxy(url) ? proxyUrl(url) : url;
+function aiApiUrl(config: AiConfig & { useProxy?: boolean }, path: string) {
+    return buildApiUrl(config.baseUrl, path, config.useProxy);
 }
 
 function aiHeaders(config: AiConfig, contentType?: string) {

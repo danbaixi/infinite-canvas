@@ -20,6 +20,7 @@ export type ModelChannel = {
     apiKey: string;
     apiFormat: ApiCallFormat;
     models: ChannelModel[];
+    useProxy?: boolean;
 };
 
 export type AiConfig = {
@@ -49,6 +50,7 @@ export type AiConfig = {
     background: string;
     count: string;
     canvasImageCount: string;
+    useProxy?: boolean;
 };
 
 export type WebdavSyncConfig = {
@@ -340,6 +342,7 @@ export function resolveModelRequestConfig(config: AiConfig, value: string) {
         baseUrl: channel.baseUrl,
         apiKey: channel.apiKey,
         apiFormat: channel.apiFormat,
+        useProxy: channel.useProxy || false,
     };
 }
 
@@ -382,12 +385,16 @@ function uniqueModelOptions(models: string[]) {
     return Array.from(new Set((models || []).map((model) => model.trim()).filter(Boolean)));
 }
 
-export function buildApiUrl(baseUrl: string, path: string) {
+export function buildApiUrl(baseUrl: string, path: string, useProxy?: boolean) {
     let normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, "");
     normalizedBaseUrl = normalizeArkPlanBaseUrl(normalizedBaseUrl);
     const lowerBaseUrl = normalizedBaseUrl.toLowerCase();
     const apiBaseUrl = lowerBaseUrl.endsWith("/v1") || lowerBaseUrl.endsWith("/api/v3") || lowerBaseUrl.endsWith("/api/plan/v3") ? normalizedBaseUrl : `${normalizedBaseUrl}/v1`;
-    return `${apiBaseUrl}${path}`;
+    const targetUrl = `${apiBaseUrl}${path}`;
+    if (useProxy) {
+        return `/api/cors-proxy?url=${encodeURIComponent(targetUrl)}`;
+    }
+    return targetUrl;
 }
 
 function normalizeArkPlanBaseUrl(baseUrl: string) {
