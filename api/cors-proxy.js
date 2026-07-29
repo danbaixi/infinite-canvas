@@ -8,12 +8,14 @@ export default async function handler(req, res) {
         res.setHeader("Access-Control-Allow-Origin", "*");
         res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
         res.setHeader("Access-Control-Allow-Headers", "*");
-        return res.status(204).end();
+        res.status(204).end();
+        return;
     }
 
     const targetUrl = req.query.url;
     if (!targetUrl) {
-        return res.status(400).json({ error: "缺少 url 参数" });
+        res.status(400).json({ error: "缺少 url 参数" });
+        return;
     }
 
     try {
@@ -29,17 +31,16 @@ export default async function handler(req, res) {
             body: req.method !== "GET" && req.method !== "HEAD" ? req.body : undefined,
         });
 
-        const responseHeaders = {};
         upstream.headers.forEach((value, key) => {
             if (!["content-encoding", "transfer-encoding"].includes(key.toLowerCase())) {
-                responseHeaders[key] = value;
+                res.setHeader(key, value);
             }
         });
-        responseHeaders["Access-Control-Allow-Origin"] = "*";
+        res.setHeader("Access-Control-Allow-Origin", "*");
 
         const body = await upstream.arrayBuffer();
-        return res.status(upstream.status).set(responseHeaders).send(Buffer.from(body));
+        res.status(upstream.status).send(Buffer.from(body));
     } catch (err) {
-        return res.status(502).json({ error: "代理请求失败", detail: String(err) });
+        res.status(502).json({ error: "代理请求失败", detail: String(err) });
     }
 }
