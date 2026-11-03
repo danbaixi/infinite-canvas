@@ -3,5 +3,11 @@
   "installCommand": "cd web && bun install",
   "buildCommand": "cd web && bun run build",
   "outputDirectory": "web/dist",
+  "functions": {
+    "api/proxy.js": {
+      "maxDuration": 300,
+      "memory": 1024
+    }
+  },
   "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }]
 }

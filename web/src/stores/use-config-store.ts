@@ -4,10 +4,12 @@ import { persist } from "zustand/middleware";
 import { nanoid } from "nanoid";
 
 import i18n from "@/i18n";
+import { proxyApiUrl } from "@/lib/api-proxy";
 
 export type ApiCallFormat = "openai" | "gemini";
 export type ModelCapability = "image" | "video" | "text" | "audio";
 export type ReasoningEffort = "auto" | "low" | "medium" | "high" | "xhigh";
+export type ProxyMode = "local" | "server";
 
 export type ChannelModel = {
     name: string;
@@ -22,6 +24,7 @@ export type ModelChannel = {
     apiKey: string;
     apiFormat: ApiCallFormat;
     models: ChannelModel[];
+    useProxy?: boolean;
 };
 
 export type AiConfig = {
@@ -53,6 +56,7 @@ export type AiConfig = {
     count: string;
     canvasImageCount: string;
     proxyEnabled: boolean;
+    proxyMode: ProxyMode;
     proxyUrl: string;
     nodeRegenerateBehavior: "new-node" | "overwrite";
     autoFocusOnSelect: boolean;
@@ -78,6 +82,7 @@ const OPENAI_BASE_URL = "https://api.openai.com";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
 export const LOCAL_PROXY_PACKAGE = "@basketikun/canvas-proxy";
 export const DEFAULT_LOCAL_PROXY_URL = "http://127.0.0.1:23210";
+export const DEFAULT_SERVER_PROXY_URL = "/api/proxy";
 
 export const defaultConfig: AiConfig = {
     channelMode: "local",
@@ -122,6 +127,7 @@ export const defaultConfig: AiConfig = {
     count: "1",
     canvasImageCount: "3",
     proxyEnabled: false,
+    proxyMode: "local",
     proxyUrl: DEFAULT_LOCAL_PROXY_URL,
     nodeRegenerateBehavior: "new-node",
     autoFocusOnSelect: false,
@@ -281,6 +287,7 @@ export const useConfigStore = create<ConfigStore>()(
                         videoMode: config.videoMode === "reference" ? "reference" : "frames",
                         canvasImageCount: config.canvasImageCount || "3",
                         proxyEnabled: Boolean(config.proxyEnabled),
+                        proxyMode: config.proxyMode === "server" ? "server" : "local",
                         proxyUrl: config.proxyUrl || DEFAULT_LOCAL_PROXY_URL,
                         nodeRegenerateBehavior: config.nodeRegenerateBehavior === "overwrite" ? "overwrite" : "new-node",
                         autoFocusOnSelect: Boolean(config.autoFocusOnSelect),
@@ -320,6 +327,7 @@ export function createModelChannel(channel?: Partial<ModelChannel>): ModelChanne
         apiKey: channel?.apiKey || "",
         apiFormat,
         models: normalizeChannelModels(channel?.models),
+        useProxy: Boolean(channel?.useProxy),
     };
 }
 
@@ -443,6 +451,7 @@ export function resolveModelRequestConfig(config: AiConfig, value: string) {
         baseUrl: channel.baseUrl,
         apiKey: channel.apiKey,
         apiFormat: channel.apiFormat,
+        useProxy: channel.useProxy,
     };
 }
 
@@ -484,11 +493,11 @@ function uniqueModelOptions(models: string[]) {
     return Array.from(new Set((models || []).map((model) => model.trim()).filter(Boolean)));
 }
 
-export function buildApiUrl(baseUrl: string, path: string) {
+export function buildApiUrl(baseUrl: string, path: string, useProxy?: boolean) {
     const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, "");
     const lowerBaseUrl = normalizedBaseUrl.toLowerCase();
     const apiBaseUrl = lowerBaseUrl.endsWith("/v1") ? normalizedBaseUrl : `${normalizedBaseUrl}/v1`;
-    return withLocalProxy(`${apiBaseUrl}${path}`);
+    return withLocalProxy(`${apiBaseUrl}${path}`, useProxy);
 }
 
 export function normalizeLocalProxyUrl(value: string) {
@@ -497,10 +506,28 @@ export function normalizeLocalProxyUrl(value: string) {
     return /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
 }
 
-/** Prefix an outgoing request with the local forwarding proxy so the browser is not blocked by CORS. */
-export function withLocalProxy(url: string) {
-    const { proxyEnabled, proxyUrl } = useConfigStore.getState().config;
-    if (!proxyEnabled || !/^https?:\/\//i.test(url)) return url;
+/** Server proxies accept ?url= and may be a same-origin path such as /api/proxy. An optional ?token= is kept. */
+export function normalizeServerProxyUrl(value: string) {
+    const trimmed = value.trim().replace(/\/+$/, "");
+    if (!trimmed) return "";
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `/${trimmed.replace(/^\/+/, "")}`;
+}
+
+/**
+ * Prefix an outgoing request with the configured proxy so the browser is not blocked by CORS.
+ * A channel-level switch can force it on; turning the global switch off otherwise keeps requests direct,
+ * except on localhost where cross-origin requests are rewritten to the Vite same-origin proxy.
+ */
+export function withLocalProxy(url: string, useProxy?: boolean) {
+    const { proxyEnabled, proxyMode, proxyUrl } = useConfigStore.getState().config;
+    if (!/^https?:\/\//i.test(url)) return url;
+    if (!proxyEnabled && useProxy !== true) return proxyApiUrl(url);
+
+    if (proxyMode === "server") {
+        const base = normalizeServerProxyUrl(proxyUrl) || DEFAULT_SERVER_PROXY_URL;
+        return url.startsWith(`${base}?`) ? url : `${base}${base.includes("?") ? "&" : "?"}url=${encodeURIComponent(url)}`;
+    }
+
     const base = normalizeLocalProxyUrl(proxyUrl);
     if (!base || url.startsWith(`${base}/`)) return url;
     return `${base}/${url}`;

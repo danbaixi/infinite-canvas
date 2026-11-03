@@ -9,7 +9,11 @@ To try the project, deploy or start the `web/` frontend.
 
 ## Deploy with Vercel
 
-Import the repository into Vercel. The root `vercel.json` builds `web/`. AI requests are sent directly from the browser to your OpenAI-compatible endpoint, so no additional application server is required.
+Import the repository into Vercel. The root `vercel.json` builds `web/` and deploys `api/proxy.js` as a serverless function.
+
+AI requests still go straight from the browser to your OpenAI-compatible endpoint by default. When CORS blocks them, open Settings → Request proxy, switch to Server, and keep the address at `/api/proxy`; the same-origin function forwards the request without running anything locally. Common AI hosts are allowed by default — add other hosts (such as a self-hosted relay) to the `PROXY_ALLOWED_HOSTS` environment variable. Optionally set `PROXY_TOKEN` and append `?token=xxx` to the proxy address.
+
+Vercel Functions cap request and response bodies at 4.5 MB, so uploading large reference images or receiving large base64 payloads can return 413. For those cases, deploy `canvas-proxy` separately on a service without that limit.
 
 ## Run locally
 
@@ -21,6 +25,27 @@ bun run dev
 ```
 
 Open `http://localhost:3000`.
+
+When the page is served from `localhost` or `127.0.0.1`, the Vite dev/preview server rewrites cross-origin requests to the same-origin `/ai-proxy/?target=<url>`, forwards them, and streams the response back — no extra proxy process and no direct browser access to third-party hosts. Set `VITE_API_PROXY=true|false` to force the behavior on or off; a production deployment keeps direct requests by default.
+
+### When your network needs a proxy
+
+Forwarding is done by Node's `fetch`, which does **not** read the operating system proxy settings. An endpoint your browser can reach may therefore still time out here:
+
+```json
+{"error":"代理请求失败","detail":"UND_ERR_CONNECT_TIMEOUT","target":"https://..."}
+```
+
+Point Node at your local proxy client before starting the dev server:
+
+```powershell
+$env:NODE_USE_ENV_PROXY="1"
+$env:HTTPS_PROXY="http://127.0.0.1:7897"
+$env:HTTP_PROXY="http://127.0.0.1:7897"
+npm run dev
+```
+
+Replace `7897` with your proxy port. If you later shut the proxy client down, clear these variables (`Remove-Item Env:HTTPS_PROXY`), otherwise forwarding keeps dialing a port that no longer listens.
 
 ## Run with Docker
 
