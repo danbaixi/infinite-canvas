@@ -4,7 +4,7 @@ import { persist } from "zustand/middleware";
 import { nanoid } from "nanoid";
 
 import i18n from "@/i18n";
-import { proxyApiUrl } from "@/lib/api-proxy";
+import { isLocalHost } from "@/lib/api-proxy";
 
 export type ApiCallFormat = "openai" | "gemini";
 export type ModelCapability = "image" | "video" | "text" | "audio";
@@ -58,6 +58,8 @@ export type AiConfig = {
     proxyEnabled: boolean;
     proxyMode: ProxyMode;
     proxyUrl: string;
+    /** 用户是否手动改过代理设置。false 表示仍在用默认值，升级时可以被新默认值覆盖。 */
+    proxyConfigured: boolean;
     nodeRegenerateBehavior: "new-node" | "overwrite";
     autoFocusOnSelect: boolean;
 };
@@ -126,9 +128,10 @@ export const defaultConfig: AiConfig = {
     background: "",
     count: "1",
     canvasImageCount: "3",
-    proxyEnabled: false,
-    proxyMode: "local",
-    proxyUrl: DEFAULT_LOCAL_PROXY_URL,
+    proxyEnabled: true,
+    proxyMode: "server",
+    proxyUrl: DEFAULT_SERVER_PROXY_URL,
+    proxyConfigured: false,
     nodeRegenerateBehavior: "new-node",
     autoFocusOnSelect: false,
 };
@@ -262,6 +265,12 @@ export const useConfigStore = create<ConfigStore>()(
                 if (!Array.isArray(persistedConfig.channels)) config.channels = [];
                 const channels = normalizeChannels(config);
                 const models = modelOptionsFromChannels(channels);
+                // 旧版本默认是「关闭 + 指向本机 23210 端口」，新版本默认改为「开启 + 同源 /api/proxy」。
+                // 只有用户从没手动改过代理设置时，才跟随新默认值；改过的一律保留。
+                const proxyConfigured = Boolean(persistedConfig.proxyConfigured);
+                const proxyMode: ProxyMode = proxyConfigured ? (config.proxyMode === "server" ? "server" : "local") : defaultConfig.proxyMode;
+                const proxyUrl = proxyConfigured ? config.proxyUrl || DEFAULT_LOCAL_PROXY_URL : defaultConfig.proxyUrl;
+                const proxyEnabled = proxyConfigured ? Boolean(config.proxyEnabled) : defaultConfig.proxyEnabled;
                 return {
                     ...current,
                     webdav: { ...defaultWebdavSyncConfig, ...persistedWebdav },
@@ -286,9 +295,10 @@ export const useConfigStore = create<ConfigStore>()(
                         videoWatermark: config.videoWatermark || "false",
                         videoMode: config.videoMode === "reference" ? "reference" : "frames",
                         canvasImageCount: config.canvasImageCount || "3",
-                        proxyEnabled: Boolean(config.proxyEnabled),
-                        proxyMode: config.proxyMode === "server" ? "server" : "local",
-                        proxyUrl: config.proxyUrl || DEFAULT_LOCAL_PROXY_URL,
+                        proxyEnabled,
+                        proxyMode,
+                        proxyUrl,
+                        proxyConfigured,
                         nodeRegenerateBehavior: config.nodeRegenerateBehavior === "overwrite" ? "overwrite" : "new-node",
                         autoFocusOnSelect: Boolean(config.autoFocusOnSelect),
                     },
@@ -514,21 +524,22 @@ export function normalizeServerProxyUrl(value: string) {
 }
 
 /**
- * Prefix an outgoing request with the configured proxy so the browser is not blocked by CORS.
- * A channel-level switch can force it on; turning the global switch off otherwise keeps requests direct,
- * except on localhost where cross-origin requests are rewritten to the Vite same-origin proxy.
+ * Rewrite an outgoing request so it goes through a proxy instead of hitting a third-party origin directly.
+ * Default mode is the same-origin `/api/proxy` (Vite middleware locally, Vercel function in production),
+ * so no extra process is needed anywhere. Turning the global switch off restores direct requests.
  */
 export function withLocalProxy(url: string, useProxy?: boolean) {
-    const { proxyEnabled, proxyMode, proxyUrl } = useConfigStore.getState().config;
     if (!/^https?:\/\//i.test(url)) return url;
-    if (!proxyEnabled && useProxy !== true) return proxyApiUrl(url);
+    const { proxyEnabled, proxyMode, proxyUrl } = useConfigStore.getState().config;
+    if (!proxyEnabled && useProxy !== true) return url;
 
-    if (proxyMode === "server") {
-        const base = normalizeServerProxyUrl(proxyUrl) || DEFAULT_SERVER_PROXY_URL;
-        return url.startsWith(`${base}?`) ? url : `${base}${base.includes("?") ? "&" : "?"}url=${encodeURIComponent(url)}`;
+    // 本机代理进程只对「页面本身就在本机」有意义；线上部署时忽略它，退回同源服务端代理。
+    if (proxyMode === "local" && isLocalHost()) {
+        const base = normalizeLocalProxyUrl(proxyUrl);
+        if (base && !url.startsWith(`${base}/`)) return `${base}/${url}`;
     }
 
-    const base = normalizeLocalProxyUrl(proxyUrl);
-    if (!base || url.startsWith(`${base}/`)) return url;
-    return `${base}/${url}`;
+    const base = normalizeServerProxyUrl(proxyMode === "server" ? proxyUrl : "") || DEFAULT_SERVER_PROXY_URL;
+    if (url.startsWith(`${base}?`)) return url;
+    return `${base}${base.includes("?") ? "&" : "?"}url=${encodeURIComponent(url)}`;
 }

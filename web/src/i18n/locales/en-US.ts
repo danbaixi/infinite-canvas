@@ -386,7 +386,7 @@ export default {
             description: "Forward provider requests (models, image, video, text, audio) and WebDAV sync through a proxy to avoid browser CORS errors.",
             mode: { label: "Proxy type", local: "Local", server: "Server" },
             startHint: "Run this in a terminal first, and keep it running while you use the canvas:",
-            serverHint: "The server proxy ships with the site at /api/proxy on Vercel, so nothing runs on your machine. Allow target hosts with the PROXY_ALLOWED_HOSTS environment variable, and append ?token=xxx after setting PROXY_TOKEN.",
+            serverHint: "The server proxy ships with the site at /api/proxy, and the local dev/preview server exposes the same endpoint, so nothing needs to run on your machine. Any target host is allowed by default; set PROXY_ALLOWED_HOSTS to narrow it, or PROXY_TOKEN and append ?token=xxx.",
             address: "Proxy address",
             addressDescription: "Use the address printed by the command for a local proxy, or /api/proxy (or a full URL) for a server proxy.",
             channelHint: "Keep the real endpoint in Providers and WebDAV — never the proxy address. On a deployed site, turning the switch off restores direct requests; during local development, cross-origin requests go through the Vite same-origin /ai-proxy/ instead.",

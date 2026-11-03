@@ -386,7 +386,7 @@ export default {
             description: "开启后，拉取模型列表、生图、生视频、生成文本、生成音频和 WebDAV 同步等请求都会先发给代理再转发出去，用来绕开浏览器跨域限制。",
             mode: { label: "代理方式", local: "本地代理", server: "服务端代理" },
             startHint: "先在终端运行下面的命令，并在使用画布期间保持运行：",
-            serverHint: "服务端代理随站点一起部署在 Vercel 的 /api/proxy，不需要在本机运行命令。目标域名需要在环境变量 PROXY_ALLOWED_HOSTS 中放行；设置 PROXY_TOKEN 后还需在地址后加 ?token=xxx。",
+            serverHint: "服务端代理随站点部署在 /api/proxy，本地 dev/preview 也有同一套实现，不需要在本机运行任何命令。默认不限制目标域名；需要收紧时设置 PROXY_ALLOWED_HOSTS，需要口令时设置 PROXY_TOKEN 并在地址后加 ?token=xxx。",
             address: "代理地址",
             addressDescription: "本地代理填命令启动后打印的地址；服务端代理填 /api/proxy 或完整地址。",
             channelHint: "渠道和 WebDAV 仍填写真实地址，不要填代理地址。生产部署下关闭开关即恢复直连；本机开发时跨域请求会默认经由 Vite 的同源 /ai-proxy/ 转发。",

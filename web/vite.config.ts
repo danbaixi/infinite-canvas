@@ -132,39 +132,50 @@ async function forwardRequest(req: IncomingMessage, res: ServerResponse, target:
     }
 }
 
-// 服务端代理模式的本地实现：/api/proxy?url=<encoded_url>，与 Vercel 的 api/proxy.js 对齐
+// 服务端代理的本地实现：/api/proxy?url=<encoded_url>，与 Vercel 的 api/proxy.js 对齐，dev 与 preview 都可用
 function serverProxy(): Plugin {
+    const attach = (middlewares: Connect.Server) => {
+        middlewares.use("/api/proxy", (req, res, next) => {
+            if (req.method === "OPTIONS") {
+                res.setHeader("Access-Control-Allow-Origin", "*");
+                res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS, PROPFIND, MKCOL, MOVE, COPY, LOCK, UNLOCK");
+                res.setHeader("Access-Control-Allow-Headers", "*");
+                res.statusCode = 204;
+                res.end();
+                return;
+            }
+            next();
+        });
+
+        middlewares.use("/api/proxy", (req, res) => {
+            const url = new URL(req.url || "/", `http://${req.headers.host}`);
+            const raw = url.searchParams.get("url");
+            if (!raw) {
+                sendJson(res, 200, { app: "infinite-canvas", proxy: "vite-dev-proxy", version: localVersion });
+                return;
+            }
+            let target: URL;
+            try {
+                target = new URL(raw);
+            } catch {
+                sendJson(res, 400, { error: "url 参数不是合法地址" });
+                return;
+            }
+            if (target.protocol !== "http:" && target.protocol !== "https:") {
+                sendJson(res, 400, { error: "url 只支持 http(s)" });
+                return;
+            }
+            void forwardRequest(req, res, target);
+        });
+    };
+
     return {
         name: "server-proxy",
         configureServer(server) {
-            server.middlewares.use("/api/proxy", (req, res, next) => {
-                if (req.method === "OPTIONS") {
-                    res.setHeader("Access-Control-Allow-Origin", "*");
-                    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS, PROPFIND, MKCOL, MOVE, COPY, LOCK, UNLOCK");
-                    res.setHeader("Access-Control-Allow-Headers", "*");
-                    res.statusCode = 204;
-                    res.end();
-                    return;
-                }
-                next();
-            });
-
-            server.middlewares.use("/api/proxy", (req, res) => {
-                const url = new URL(req.url || "/", `http://${req.headers.host}`);
-                const raw = url.searchParams.get("url");
-                if (!raw) {
-                    sendJson(res, 200, { app: "infinite-canvas", proxy: "vite-dev-proxy", version: localVersion });
-                    return;
-                }
-                let target: URL;
-                try {
-                    target = new URL(raw);
-                } catch {
-                    sendJson(res, 400, { error: "url 参数不是合法地址" });
-                    return;
-                }
-                void forwardRequest(req, res, target);
-            });
+            attach(server.middlewares);
+        },
+        configurePreviewServer(server) {
+            attach(server.middlewares);
         },
     };
 }

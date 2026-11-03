@@ -2,8 +2,10 @@
 
 ## Unreleased
 
-+ [新增] 新增 Vercel Serverless 请求代理（`api/proxy.js`），设置里可选择「本地代理 / 服务端代理」；服务端模式填 `/api/proxy` 即可通过同域函数解决跨域，无需本机进程，支持 `PROXY_ALLOWED_HOSTS` 域名白名单和 `PROXY_TOKEN` 口令。
-+ [新增] Vite dev/preview 新增同源动态代理：本机开发时跨域请求自动改写为 `/ai-proxy/?target=<目标地址>`，由本地服务转发并流式回传，浏览器不再直接访问第三方域名，生产部署仍走直连；可用 `VITE_API_PROXY=true|false` 覆盖。
++ [新增] 新增 Vercel Serverless 请求代理（`api/proxy.js`），服务端模式填 `/api/proxy` 即可通过同域函数解决跨域，无需本机进程。
++ [调整] 请求代理改为**默认开启**，统一走同源 `/api/proxy`：本地由 Vite 中间件实现，线上由 `api/proxy.js` 实现，部署后无需任何配置即可转发；关掉开关即恢复浏览器直连。旧配置（关闭 + 指向本机 23210）会自动迁移到新默认值，手动改过的配置保持不变。
++ [调整] `api/proxy.js` 默认不再限制目标域名，任何 OpenAI 兼容地址都能转发；需要收紧时再设置 `PROXY_ALLOWED_HOSTS`，需要口令时设置 `PROXY_TOKEN`。
++ [新增] Vite dev/preview 新增同源动态代理 `/ai-proxy/?target=<目标地址>`，作为本地可选路径，转发逻辑与 `/api/proxy` 共用。
 + [修复] 修复音频接口引用已删除的代理模块导致构建失败，以及渠道「通过代理请求」开关没有真正参与请求转发的问题。
 + [调整] 设置中的「本地代理」页签改为「请求代理」，本地代理的使用方式保持不变。
 

@@ -5,8 +5,11 @@
  * 根路径不带 url 时返回代理身份，供设置页「测试连接」使用。
  *
  * 环境变量：
- *   PROXY_ALLOWED_HOSTS  允许转发的目标主机，逗号分隔，支持 *.example.com；设为 * 表示不限制
- *   PROXY_TOKEN          访问口令，未设置时不校验；请求需带 ?token=xxx 或 x-proxy-token 头
+ *   PROXY_ALLOWED_HOSTS  可选。允许转发的目标主机，逗号分隔，支持 *.example.com；不设置时不做任何限制
+ *   PROXY_TOKEN          可选。访问口令，未设置时不校验；请求需带 ?token=xxx 或 x-proxy-token 头
+ *
+ * 注意：不限制目标域名时，任何知道地址的人都能拿它做 CORS 转发。若担心被滥用，
+ * 请设置 PROXY_ALLOWED_HOSTS 收紧范围，或加 PROXY_TOKEN 并走 /api/proxy?token=xxx。
  *
  * 纯转发：不改写请求体，不落盘日志，响应边读边写，SSE 流式内容不会被缓冲。
  */
@@ -31,30 +34,8 @@ const HOP_BY_HOP_HEADERS = new Set([
     "x-proxy-token",
 ]);
 
-/** 未配置 PROXY_ALLOWED_HOSTS 时默认放行的常见 AI 服务域名。 */
-const DEFAULT_ALLOWED_HOSTS = [
-    "api.openai.com",
-    "*.openai.com",
-    "api.anthropic.com",
-    "*.googleapis.com",
-    "api.x.ai",
-    "api.deepseek.com",
-    "dashscope.aliyuncs.com",
-    "api.moonshot.cn",
-    "api.siliconflow.cn",
-    "openrouter.ai",
-    "api.replicate.com",
-    "fal.run",
-    "queue.fal.run",
-    "api.together.xyz",
-    "api.groq.com",
-    "api.mistral.ai",
-    "api.minimax.chat",
-    "open.bigmodel.cn",
-    "ark.cn-beijing.volces.com",
-    "api.stability.ai",
-    "api.elevenlabs.io",
-];
+/** 未配置 PROXY_ALLOWED_HOSTS 时不做限制，任何目标域名都允许转发。 */
+const DEFAULT_ALLOWED_HOSTS = [];
 
 const IDENTITY = { app: "infinite-canvas", proxy: "vercel-proxy", version: "1" };
 

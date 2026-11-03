@@ -11,7 +11,11 @@ To try the project, deploy or start the `web/` frontend.
 
 Import the repository into Vercel. The root `vercel.json` builds `web/` and deploys `api/proxy.js` as a serverless function.
 
-AI requests still go straight from the browser to your OpenAI-compatible endpoint by default. When CORS blocks them, open Settings → Request proxy, switch to Server, and keep the address at `/api/proxy`; the same-origin function forwards the request without running anything locally. Common AI hosts are allowed by default — add other hosts (such as a self-hosted relay) to the `PROXY_ALLOWED_HOSTS` environment variable. Optionally set `PROXY_TOKEN` and append `?token=xxx` to the proxy address.
+Requests go through the same-origin `/api/proxy` by default: the serverless function forwards them to your model endpoint, so the browser never touches a third-party origin and CORS stops being an issue. Nothing needs to run locally. Any OpenAI-compatible host is allowed out of the box.
+
+To keep others from using your deployment as a public CORS relay, tighten it with `PROXY_ALLOWED_HOSTS=api.openai.com,your-relay.com` (comma separated, `*.example.com` supported), and optionally `PROXY_TOKEN=xxx` with `?token=xxx` appended to the proxy address in Settings → Request proxy.
+
+To go back to direct browser requests, turn the proxy switch off in Settings → Request proxy.
 
 Vercel Functions cap request and response bodies at 4.5 MB, so uploading large reference images or receiving large base64 payloads can return 413. For those cases, deploy `canvas-proxy` separately on a service without that limit.
 
@@ -26,7 +30,7 @@ bun run dev
 
 Open `http://localhost:3000`.
 
-When the page is served from `localhost` or `127.0.0.1`, the Vite dev/preview server rewrites cross-origin requests to the same-origin `/ai-proxy/?target=<url>`, forwards them, and streams the response back — no extra proxy process and no direct browser access to third-party hosts. Set `VITE_API_PROXY=true|false` to force the behavior on or off; a production deployment keeps direct requests by default.
+Cross-origin requests are rewritten to the same-origin `/api/proxy?url=<target>` and forwarded (and streamed back) by the local Vite middleware — or by the serverless function once deployed. No extra process is needed and the browser never contacts third-party hosts directly. Switch the mode to Local if you would rather use a standalone proxy process, or turn the switch off to restore direct requests.
 
 ### When your network needs a proxy
 

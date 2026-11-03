@@ -17,6 +17,9 @@ export function ConfigLocalProxy() {
     const isServer = config.proxyMode === "server";
     const command = localProxyCommand(config.proxyUrl);
 
+    // 只要用户动过代理设置，就不再跟随默认值自动升级
+    const markConfigured = () => updateConfig("proxyConfigured", true);
+
     const testProxy = async () => {
         setTesting(true);
         try {
@@ -34,6 +37,7 @@ export function ConfigLocalProxy() {
         const normalizedCurrent = isServer ? normalizeServerProxyUrl(config.proxyUrl) : normalizeLocalProxyUrl(config.proxyUrl);
         updateConfig("proxyMode", mode);
         if (normalizedCurrent === currentDefault) updateConfig("proxyUrl", mode === "server" ? DEFAULT_SERVER_PROXY_URL : DEFAULT_LOCAL_PROXY_URL);
+        updateConfig("proxyConfigured", true);
     };
 
     return (
@@ -47,7 +51,13 @@ export function ConfigLocalProxy() {
                         </div>
                         <div className="mt-1 text-xs text-stone-500">{t("config.proxy.description")}</div>
                     </div>
-                    <Switch checked={config.proxyEnabled} onChange={(checked) => updateConfig("proxyEnabled", checked)} />
+                    <Switch
+                        checked={config.proxyEnabled}
+                        onChange={(checked) => {
+                            updateConfig("proxyEnabled", checked);
+                            markConfigured();
+                        }}
+                    />
                 </div>
                 {config.proxyEnabled ? (
                     <>
@@ -77,12 +87,13 @@ export function ConfigLocalProxy() {
                                 value={config.proxyUrl}
                                 placeholder={isServer ? DEFAULT_SERVER_PROXY_URL : DEFAULT_LOCAL_PROXY_URL}
                                 onChange={(event) => updateConfig("proxyUrl", event.target.value)}
-                                onBlur={(event) =>
+                                onBlur={(event) => {
                                     updateConfig(
                                         "proxyUrl",
                                         (isServer ? normalizeServerProxyUrl(event.target.value) : normalizeLocalProxyUrl(event.target.value)) || (isServer ? DEFAULT_SERVER_PROXY_URL : DEFAULT_LOCAL_PROXY_URL),
-                                    )
-                                }
+                                    );
+                                    markConfigured();
+                                }}
                             />
                         </Form.Item>
                         <Button className="mt-3" icon={<Wifi className="size-4" />} loading={testing} onClick={() => void testProxy()}>

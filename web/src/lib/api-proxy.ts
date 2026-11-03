@@ -1,20 +1,24 @@
 /**
- * 本地开发/预览时把跨域请求改写为同源 /ai-proxy/?target=，由 Vite 的 ai-api-proxy 插件转发。
- * 生产环境（非本机）默认不改写，仍由浏览器直连；可用 VITE_API_PROXY=true|false 强制覆盖。
+ * 把跨域请求改写成同源代理地址，避免浏览器直接访问第三方域名。
+ *
+ * 本地（Vite dev/preview）走 `/ai-proxy/?target=`，由 vite.config.ts 的中间件转发；
+ * 生产部署走同源的 `/api/proxy?url=`，由 Serverless 函数或自建服务转发。
+ * 默认开启，可用 VITE_API_PROXY=false 关闭。
  */
 
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1"]);
 
 export const API_PROXY_PATH = "/ai-proxy/";
+export const SERVER_PROXY_PATH = "/api/proxy";
+
+export function isLocalHost() {
+    return typeof window !== "undefined" && LOCAL_HOSTNAMES.has(window.location.hostname);
+}
 
 export function apiProxyEnabled() {
     // 写成直接成员访问，Vite 才能在构建时把 import.meta.env 替换成真实配置
     const env = (import.meta.env ?? {}) as Record<string, string | undefined>;
-    const flag = env.VITE_API_PROXY;
-    if (flag === "true") return true;
-    if (flag === "false") return false;
-    if (typeof window === "undefined") return false;
-    return LOCAL_HOSTNAMES.has(window.location.hostname);
+    return env.VITE_API_PROXY !== "false";
 }
 
 /** 只改写真正的跨域 http(s) 地址，同源、相对路径和 data/blob URL 原样返回。 */
@@ -25,5 +29,6 @@ export function proxyApiUrl(url: string) {
     } catch {
         return url;
     }
-    return `${API_PROXY_PATH}?target=${encodeURIComponent(url)}`;
+    const encoded = encodeURIComponent(url);
+    return isLocalHost() ? `${API_PROXY_PATH}?target=${encoded}` : `${SERVER_PROXY_PATH}?url=${encoded}`;
 }

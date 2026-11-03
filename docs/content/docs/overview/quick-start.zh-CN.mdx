@@ -11,7 +11,11 @@ description: 用最少步骤把无限画布跑起来
 
 在 Vercel 中导入仓库即可：根目录 `vercel.json` 会构建 `web/`，并把 `api/proxy.js` 一并部署为 Serverless 函数。
 
-默认仍是浏览器直连用户自己的 OpenAI 兼容地址。遇到跨域时，打开配置 → 请求代理，切换到「服务端代理」，地址保持 `/api/proxy` 即可经由同域函数转发，不需要本机再运行任何命令。目标域名默认放行常见 AI 服务，自建中转站等其它域名需要在 Vercel 环境变量 `PROXY_ALLOWED_HOSTS` 中追加；如需口令，再设置 `PROXY_TOKEN` 并在代理地址后加 `?token=xxx`。
+默认就走同源的 `/api/proxy`：请求由这个 Serverless 函数转发到你的模型服务，浏览器不直接访问第三方域名，跨域和网络可达性问题一次解决，不需要本机再运行任何命令。默认不限制目标域名，任何 OpenAI 兼容地址都能转发。
+
+如果担心被人当成公开代理，可以在 Vercel 环境变量里收紧范围：`PROXY_ALLOWED_HOSTS=api.openai.com,your-relay.com`（逗号分隔，支持 `*.example.com`）；也可以加 `PROXY_TOKEN=xxx`，并在配置 → 请求代理的地址后带上 `?token=xxx`。
+
+想恢复浏览器直连，打开配置 → 请求代理，把开关关掉即可。
 
 Vercel 函数对单次请求和响应的体积上限是 4.5 MB，图生图上传大图或返回大尺寸 base64 时可能触发 413，这种场景更适合把 `canvas-proxy` 单独部署到支持长连接和更大请求体的服务上。
 
@@ -31,7 +35,9 @@ bun run dev
 http://localhost:3000
 ```
 
-在本机用 `localhost` 或 `127.0.0.1` 访问时，Vite 的 dev/preview 服务会把跨域请求自动改写为同源的 `/ai-proxy/?target=<目标地址>`，再由本地服务转发并流式回传，不需要额外启动代理进程，浏览器也不会直接访问第三方域名。需要强制开启或关闭这一行为时，设置环境变量 `VITE_API_PROXY=true|false`；生产构建部署后默认仍为直连。
+跨域请求默认就会被改写成同源的 `/api/proxy?url=<目标地址>`，由本地 Vite 中间件（线上则是对应的 Serverless 函数）转发并流式回传，不需要额外启动代理进程，浏览器也不会直接访问第三方域名。想在本地改用独立的代理进程，把配置里的模式切到「本地代理」即可；想彻底关掉代理恢复直连，关掉开关即可。
+
+（`/ai-proxy/?target=` 是另一条等价的本地路径，仅在设置 `VITE_API_PROXY` 相关场景下才会用到。）
 
 ### 网络需要代理时
 
