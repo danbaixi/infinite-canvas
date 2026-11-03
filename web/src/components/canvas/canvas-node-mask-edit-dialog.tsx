@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { Button, Input, Modal, Slider, Tooltip } from "antd";
-import { Brush, Eraser, Redo2, RotateCcw, Undo2, WandSparkles, X, ZoomIn, ZoomOut } from "lucide-react";
+import { Brush, Eraser, ImagePlus, Redo2, RotateCcw, Undo2, WandSparkles, ZoomIn, ZoomOut } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { readImageMeta } from "@/lib/image-utils";
 import { useImageEditorViewport } from "@/components/canvas/use-image-editor-viewport";
@@ -9,6 +10,7 @@ import { useImageEditorViewport } from "@/components/canvas/use-image-editor-vie
 export type CanvasImageMaskEditPayload = {
     prompt: string;
     maskDataUrl: string;
+    generate: boolean;
 };
 
 type DrawMode = "paint" | "erase";
@@ -17,11 +19,14 @@ type MaskStroke = { mode: DrawMode; size: number; points: Point[] };
 type BrushPreview = { x: number; y: number; size: number; adjusting: boolean };
 
 const defaultBrushSize = 100;
-const maskFillColor = "rgba(37, 99, 235, .38)";
+const maskOverlayColor = "#2563eb";
+const maskOverlayAlpha = 0.4;
 
 export function CanvasNodeMaskEditDialog({ dataUrl, open, onClose, onConfirm }: { dataUrl: string; open: boolean; onClose: () => void; onConfirm: (payload: CanvasImageMaskEditPayload) => void }) {
+    const { t } = useTranslation();
     const maskCanvasRef = useRef<HTMLCanvasElement>(null);
     const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+    const imageRef = useRef<HTMLImageElement>(null);
     const drawingRef = useRef<{ active: boolean; stroke: MaskStroke | null }>({ active: false, stroke: null });
     const brushAdjustRef = useRef<{ active: boolean; pointerId: number; startX: number; startSize: number; previewX: number; previewY: number } | null>(null);
     const historyRef = useRef<MaskStroke[]>([]);
@@ -198,13 +203,14 @@ export function CanvasNodeMaskEditDialog({ dataUrl, open, onClose, onConfirm }: 
         return () => window.removeEventListener("keydown", handleKeyDown, true);
     }, [open, redoMask, undoMask]);
 
-    const submit = () => {
+    const submit = (generate: boolean) => {
         const nextPrompt = prompt.trim();
         const canvas = maskCanvasRef.current;
-        if (!nextPrompt) return setError("请输入修改要求");
-        if (!canvas) return;
-        if (!canvasHasPaint(canvas)) return setError("请先涂抹局部区域");
-        onConfirm({ prompt: nextPrompt, maskDataUrl: buildEditMask(canvas) });
+        const element = imageRef.current;
+        if (!nextPrompt) return setError(t("canvas.editors.maskPromptRequired"));
+        if (!canvas || !element) return;
+        if (!canvasHasPaint(canvas)) return setError(t("canvas.editors.maskRequired"));
+        onConfirm({ prompt: nextPrompt, maskDataUrl: buildMaskOverlay(element, canvas), generate });
     };
 
     return (
@@ -221,12 +227,13 @@ export function CanvasNodeMaskEditDialog({ dataUrl, open, onClose, onConfirm }: 
                                 <>
                                     <canvas ref={maskCanvasRef} width={image.width} height={image.height} className="hidden" />
                                     <div className="absolute left-0 top-0 [backface-visibility:hidden]" style={viewport.mediaStyle}>
-                                        <img src={dataUrl} alt="" className="absolute inset-0 block h-full w-full bg-transparent object-contain" draggable={false} />
+                                        <img ref={imageRef} src={dataUrl} alt="" className="absolute inset-0 block h-full w-full bg-transparent object-contain" draggable={false} />
                                         <canvas
                                             ref={previewCanvasRef}
                                             width={image.width}
                                             height={image.height}
                                             className="absolute inset-0 h-full w-full cursor-none touch-none"
+                                            style={{ opacity: maskOverlayAlpha }}
                                             onPointerDown={startDraw}
                                             onPointerMove={moveDraw}
                                             onPointerUp={stopDraw}
@@ -257,55 +264,55 @@ export function CanvasNodeMaskEditDialog({ dataUrl, open, onClose, onConfirm }: 
 
                 <div className="flex min-h-[360px] flex-col gap-5">
                     <div>
-                        <h2 className="text-xl font-semibold">局部遮罩编辑</h2>
-                        <div className="mt-2 text-sm opacity-60">{image ? `${image.width} x ${image.height}px` : "读取中"}</div>
-                        <div className="mt-2 text-xs leading-5 opacity-55">滚轮缩放 · 中键或空格+左键拖动画面 · Alt+左/右键横拖调笔刷 · Ctrl/Cmd+Z 撤回 · Ctrl/Cmd+Shift+Z 重做</div>
+                        <h2 className="text-xl font-semibold">{t("canvas.editors.maskTitle")}</h2>
+                        <div className="mt-2 text-sm opacity-60">{image ? `${image.width} x ${image.height}px` : t("canvas.editors.loading")}</div>
+                        <div className="mt-2 text-xs leading-5 opacity-55">{t("canvas.editors.maskHint")}</div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
                         <Button type={mode === "paint" ? "primary" : "default"} icon={<Brush className="size-4" />} onClick={() => setMode("paint")}>
-                            画笔
+                            {t("canvas.editors.brush")}
                         </Button>
                         <Button type={mode === "erase" ? "primary" : "default"} icon={<Eraser className="size-4" />} onClick={() => setMode("erase")}>
-                            擦除
+                            {t("canvas.editors.erase")}
                         </Button>
                     </div>
 
                     <div className="flex items-center justify-between rounded-lg border border-black/10 px-2 py-1 dark:border-white/10">
-                        <Tooltip title="撤回局部涂抹 (Ctrl/Cmd+Z)">
-                            <Button type="text" icon={<Undo2 className="size-4" />} disabled={!historySize} aria-label="撤回局部涂抹" onClick={undoMask} />
+                        <Tooltip title={t("canvas.editors.undoMaskTitle")}>
+                            <Button type="text" icon={<Undo2 className="size-4" />} disabled={!historySize} aria-label={t("canvas.editors.undoMask")} onClick={undoMask} />
                         </Tooltip>
-                        <Tooltip title="重做局部涂抹 (Ctrl/Cmd+Shift+Z)">
-                            <Button type="text" icon={<Redo2 className="size-4" />} disabled={!redoSize} aria-label="重做局部涂抹" onClick={redoMask} />
+                        <Tooltip title={t("canvas.editors.redoMaskTitle")}>
+                            <Button type="text" icon={<Redo2 className="size-4" />} disabled={!redoSize} aria-label={t("canvas.editors.redoMask")} onClick={redoMask} />
                         </Tooltip>
                         <div className="flex items-center gap-1">
-                            <Tooltip title="缩小">
-                                <Button type="text" icon={<ZoomOut className="size-4" />} disabled={!viewport.canZoomOut} aria-label="缩小" onClick={viewport.zoomOut} />
+                            <Tooltip title={t("canvas.editors.zoomOut")}>
+                                <Button type="text" icon={<ZoomOut className="size-4" />} disabled={!viewport.canZoomOut} aria-label={t("canvas.editors.zoomOut")} onClick={viewport.zoomOut} />
                             </Tooltip>
                             <button type="button" className="min-w-14 text-center text-xs font-semibold tabular-nums opacity-70" onClick={viewport.resetZoom}>
                                 {Math.round(viewport.zoom * 100)}%
                             </button>
-                            <Tooltip title="放大">
-                                <Button type="text" icon={<ZoomIn className="size-4" />} disabled={!viewport.canZoomIn} aria-label="放大" onClick={viewport.zoomIn} />
+                            <Tooltip title={t("canvas.editors.zoomIn")}>
+                                <Button type="text" icon={<ZoomIn className="size-4" />} disabled={!viewport.canZoomIn} aria-label={t("canvas.editors.zoomIn")} onClick={viewport.zoomIn} />
                             </Tooltip>
                         </div>
                     </div>
 
                     <div className="space-y-2">
                         <div className="flex items-center justify-between text-sm">
-                            <span className="font-medium opacity-75">笔刷大小</span>
+                            <span className="font-medium opacity-75">{t("canvas.editors.brushSize")}</span>
                             <span className="font-semibold">{brushSize}px</span>
                         </div>
                         <Slider min={8} max={160} step={2} value={brushSize} onChange={setBrushSize} />
                     </div>
 
                     <div className="space-y-2">
-                        <div className="text-sm font-medium opacity-75">修改要求</div>
+                        <div className="text-sm font-medium opacity-75">{t("canvas.editors.editInstructions")}</div>
                         <Input.TextArea
                             rows={6}
                             value={prompt}
                             status={error && !prompt.trim() ? "error" : undefined}
-                            placeholder="例如：把选中区域改成金属材质，保持原图光影"
+                            placeholder={t("canvas.editors.maskPlaceholder")}
                             onChange={(event) => {
                                 setPrompt(event.target.value);
                                 setError("");
@@ -316,14 +323,14 @@ export function CanvasNodeMaskEditDialog({ dataUrl, open, onClose, onConfirm }: 
 
                     <div className="mt-auto flex items-center justify-between gap-2">
                         <Button icon={<RotateCcw className="size-4" />} onClick={resetMask}>
-                            重置
+                            {t("canvas.editors.reset")}
                         </Button>
                         <div className="flex items-center gap-2">
-                            <Button icon={<X className="size-4" />} onClick={onClose}>
-                                取消
+                            <Button icon={<ImagePlus className="size-4" />} onClick={() => submit(false)}>
+                                {t("canvas.editors.maskExport")}
                             </Button>
-                            <Button type="primary" icon={<WandSparkles className="size-4" />} onClick={submit}>
-                                AI 修改
+                            <Button type="primary" icon={<WandSparkles className="size-4" />} onClick={() => submit(true)}>
+                                {t("canvas.editors.maskGenerate")}
                             </Button>
                         </div>
                     </div>
@@ -378,8 +385,8 @@ function configurePreviewStrokeContext(context: CanvasRenderingContext2D, stroke
     context.lineJoin = "round";
     context.lineWidth = stroke.size;
     context.globalCompositeOperation = stroke.mode === "paint" ? "source-over" : "destination-out";
-    context.strokeStyle = maskFillColor;
-    context.fillStyle = maskFillColor;
+    context.strokeStyle = maskOverlayColor;
+    context.fillStyle = maskOverlayColor;
 }
 
 function replayMask(strokes: MaskStroke[], maskCanvas: HTMLCanvasElement | null, previewCanvas: HTMLCanvasElement | null) {
@@ -409,21 +416,23 @@ function canvasHasPaint(canvas: HTMLCanvasElement) {
     return false;
 }
 
-function buildEditMask(selectionCanvas: HTMLCanvasElement) {
+function buildMaskOverlay(image: HTMLImageElement, selectionCanvas: HTMLCanvasElement) {
     const canvas = document.createElement("canvas");
     canvas.width = selectionCanvas.width;
     canvas.height = selectionCanvas.height;
-    const context = canvas.getContext("2d", { willReadFrequently: true });
+    const context = canvas.getContext("2d");
     if (!context) return selectionCanvas.toDataURL("image/png");
-    const selectionContext = selectionCanvas.getContext("2d", { willReadFrequently: true });
-    context.fillStyle = "#fff";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    if (!selectionContext) return canvas.toDataURL("image/png");
-    const selection = selectionContext.getImageData(0, 0, canvas.width, canvas.height);
-    const mask = context.getImageData(0, 0, canvas.width, canvas.height);
-    for (let index = 3; index < mask.data.length; index += 4) {
-        if (selection.data[index] > 0) mask.data[index] = 0;
-    }
-    context.putImageData(mask, 0, 0);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const overlay = document.createElement("canvas");
+    overlay.width = canvas.width;
+    overlay.height = canvas.height;
+    const overlayContext = overlay.getContext("2d");
+    if (!overlayContext) return canvas.toDataURL("image/png");
+    overlayContext.drawImage(selectionCanvas, 0, 0);
+    overlayContext.globalCompositeOperation = "source-in";
+    overlayContext.fillStyle = maskOverlayColor;
+    overlayContext.fillRect(0, 0, overlay.width, overlay.height);
+    context.globalAlpha = maskOverlayAlpha;
+    context.drawImage(overlay, 0, 0);
     return canvas.toDataURL("image/png");
 }
